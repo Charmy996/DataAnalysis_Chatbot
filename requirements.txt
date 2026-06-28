@@ -1,0 +1,13 @@
+pinecone
+sentence-transformers
+chainlit
+groq
+google-genai
+pymupdf
+pdfplumber
+pytesseract
+pdf2image
+pandas
+Pillow
+python-dotenv
+rank-bm25
