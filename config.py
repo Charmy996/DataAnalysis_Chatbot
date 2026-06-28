@@ -1,11 +1,10 @@
 """
 Central config — loads .env and exposes all shared clients/constants.
-Import from here instead of initializing clients in every file.
+Model is loaded lazily to avoid OOM on startup.
 """
 import os
 from dotenv import load_dotenv
 from pinecone import Pinecone
-from sentence_transformers import SentenceTransformer
 from groq import Groq
 
 load_dotenv()
@@ -20,21 +19,36 @@ GEMINI_API_KEY   = os.environ.get("GEMINI_API_KEY", "")
 TESSERACT_PATH = os.environ.get("TESSERACT_PATH", "")
 POPPLER_PATH   = os.environ.get("POPPLER_PATH", "")
 
-# ── Shared clients (single instances) ─────────────────────────
+# ── Shared clients ─────────────────────────────────────────────
 pinecone_client = Pinecone(api_key=PINECONE_API_KEY)
 pinecone_index  = pinecone_client.Index(PINECONE_INDEX)
+groq_client     = Groq(api_key=GROQ_API_KEY)
 
-groq_client = Groq(api_key=GROQ_API_KEY)
+# ── Lazy model loader ─────────────────────────────────────────
+# Model is NOT loaded at import — only when first needed
+# This prevents OOM crash on 512MB free tier hosts
+_embed_model = None
 
-# Single shared embedding model — imported by retrieve.py and pinecone_store.py
-embed_model = SentenceTransformer("BAAI/bge-base-en-v1.5")
+def get_embed_model():
+    global _embed_model
+    if _embed_model is None:
+        from sentence_transformers import SentenceTransformer
+        _embed_model = SentenceTransformer("BAAI/bge-base-en-v1.5")
+    return _embed_model
+
+# Keep embed_model as a property-like accessor for backward compatibility
+class _ModelProxy:
+    def encode(self, *args, **kwargs):
+        return get_embed_model().encode(*args, **kwargs)
+
+embed_model = _ModelProxy()
 
 # ── Model names ───────────────────────────────────────────────
 TEXT_MODEL   = "llama-3.3-70b-versatile"
 VISION_MODEL = "meta-llama/llama-4-scout-17b-16e-instruct"
 
 # ── Retrieval ─────────────────────────────────────────────────
-SCORE_THRESHOLD = 0.45   # min similarity score — below this is irrelevant
+SCORE_THRESHOLD = 0.45
 TOP_K           = 8
 
 # ── Chunking ──────────────────────────────────────────────────
